@@ -1,0 +1,440 @@
+# Prototype Database Structure
+
+## 1. Purpose
+
+This database supports a web prototype for transportation companies operating exclusively in El Salvador. The prototype manages company users, vehicles, operators, reusable locations, multi-stop routes, route optimization, and estimated fuel cost and CO2e emissions.
+
+## 2. Prototype assumptions
+
+- Each company has one implicit fleet.
+- All active company vehicles belong to that fleet.
+- No separate fleet management tables are required.
+- Each route has no more than one assigned vehicle.
+- Each route can have multiple operators, with one primary driver.
+- Each route can contain multiple ordered stops.
+- The origin and destination may be the same location.
+- The system operates only in El Salvador.
+- Currency is USD.
+- Distance is stored in kilometers.
+- Fuel volume is stored in liters.
+- Emissions are stored in kilograms of CO2 equivalent.
+- Authentication is handled by Supabase Auth.
+- PostgreSQL is used through Supabase.
+- PostGIS is optional for geographic points and route geometries.
+
+## 3. Required tables
+
+### 3.1 `companies`
+
+Stores the transportation companies using the platform.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `name`: company name.
+- `legal_name`: optional registered name.
+- `tax_identifier`: optional tax identifier.
+- `email`: contact email.
+- `phone`: contact phone.
+- `address`: principal address.
+- `department`: Salvadoran department.
+- `district`: municipality or district.
+- `currency_code`: fixed as `USD` for the prototype.
+- `timezone`: fixed as `America/El_Salvador`.
+- `status`: `active` or `inactive`.
+- `created_at`, `updated_at`: audit timestamps.
+
+### 3.2 `profiles`
+
+Stores application-specific data for users authenticated through Supabase Auth.
+
+**Main fields**
+
+- `id`: UUID primary key referencing `auth.users.id`.
+- `full_name`: user name.
+- `phone`: optional contact number.
+- `avatar_path`: optional Supabase Storage path.
+- `status`: `active`, `inactive`, or `blocked`.
+- `created_at`, `updated_at`: audit timestamps.
+
+**Important:** passwords, password hashes, tokens, and sessions must not be stored in this table.
+
+### 3.3 `company_members`
+
+Associates application users with their company and role.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `company_id`: foreign key to `companies`.
+- `user_id`: foreign key to `profiles`.
+- `role`: initially `admin`, `planner`, or `viewer`.
+- `is_active`: active membership indicator.
+- `joined_at`: membership timestamp.
+
+**Key constraints**
+
+- The pair `company_id + user_id` must be unique.
+- For the prototype, `user_id` may also be unique to restrict each user to one company.
+
+### 3.4 `vehicles`
+
+Stores all vehicles in the company's implicit fleet.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `company_id`: foreign key to `companies`.
+- `plate_number`: vehicle plate.
+- `internal_code`: optional company code.
+- `brand`, `model`, `model_year`: vehicle identification.
+- `vehicle_type`: truck, pickup, van, or another supported type.
+- `fuel_type`: diesel, regular gasoline, or premium gasoline.
+- `tank_capacity_liters`: optional tank capacity.
+- `cargo_capacity_kg`: optional cargo capacity.
+- `fuel_efficiency_km_per_liter`: estimated efficiency.
+- `odometer_km`: optional odometer value.
+- `status`: `available`, `assigned`, `maintenance`, or `inactive`.
+- `notes`: optional observations.
+- `created_at`, `updated_at`: audit timestamps.
+
+**Key constraints**
+
+- `plate_number` must be unique within a company.
+- Fuel efficiency must be greater than zero.
+- Capacity values cannot be negative.
+- Only usable vehicles may be assigned to new routes.
+
+### 3.5 `operators`
+
+Stores drivers and other route operators.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `company_id`: foreign key to `companies`.
+- `user_id`: optional foreign key to `profiles`.
+- `employee_code`: optional internal identifier.
+- `full_name`: operator name.
+- `phone`: contact number.
+- `license_number`: optional driver's license number.
+- `license_type`: optional license classification.
+- `license_expiration`: optional expiration date.
+- `status`: `available`, `assigned`, or `inactive`.
+- `notes`: optional observations.
+- `created_at`, `updated_at`: audit timestamps.
+
+An operator does not need an application account, so `user_id` remains optional.
+
+### 3.6 `locations`
+
+Stores reusable locations in El Salvador.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `company_id`: foreign key to `companies`.
+- `name`: recognizable location name.
+- `location_type`: office, warehouse, customer, supplier, pickup point, delivery point, or other.
+- `address`: human-readable address.
+- `department`: Salvadoran department.
+- `district`: municipality or district.
+- `latitude`, `longitude`: geographic coordinates.
+- `geographic_point`: optional PostGIS `Point`.
+- `contact_name`, `contact_phone`: optional contact information.
+- `average_service_minutes`: optional service-time estimate.
+- `notes`: access or delivery instructions.
+- `is_active`: availability indicator.
+- `created_at`, `updated_at`: audit timestamps.
+
+### 3.7 `route_plans`
+
+Stores the main information for each planned route.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `company_id`: foreign key to `companies`.
+- `vehicle_id`: nullable foreign key to `vehicles` while the route is a draft.
+- `route_code`: company-facing identifier.
+- `name`: route name.
+- `description`: optional description.
+- `status`: `draft`, `calculated`, `scheduled`, `completed`, `cancelled`, or `archived`.
+- `scheduled_date`: optional planned date.
+- `scheduled_start_time`: optional planned departure time.
+- `optimization_mode`: initially `shortest_distance`.
+- `stop_order_source`: `manual` or `optimized`.
+- `created_by`: foreign key to `profiles`.
+- `notes`: optional observations.
+- `created_at`, `updated_at`: audit timestamps.
+
+**Key constraints**
+
+- A draft may temporarily have no vehicle.
+- A scheduled route must have exactly one vehicle.
+- The vehicle and route must belong to the same company.
+
+### 3.8 `route_stops`
+
+Stores all ordered points in a route, including origin, intermediate stops, and destination.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `route_plan_id`: foreign key to `route_plans`.
+- `location_id`: optional foreign key to `locations`.
+- `stop_type`: `origin`, `waypoint`, or `destination`.
+- `sequence_number`: visit order.
+- `name_snapshot`: location name used for the route.
+- `address_snapshot`: address used for the route.
+- `latitude`, `longitude`: coordinate snapshot.
+- `geographic_point`: optional PostGIS `Point`.
+- `estimated_arrival_at`: optional estimated arrival.
+- `service_duration_minutes`: optional service time.
+- `distance_from_previous_km`: optional segment distance.
+- `duration_from_previous_minutes`: optional segment duration.
+- `notes`: stop-specific instructions.
+- `created_at`: creation timestamp.
+
+**Key constraints**
+
+- `sequence_number` must be unique within each route.
+- A calculated route must have exactly one origin and one destination.
+- A route may have multiple waypoints.
+- Origin and destination may reference the same location.
+- The origin has the lowest sequence and the destination the highest.
+
+Snapshot fields preserve historical route information when a saved location is later modified.
+
+### 3.9 `route_operator_assignments`
+
+Associates routes with one or more operators.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `route_plan_id`: foreign key to `route_plans`.
+- `operator_id`: foreign key to `operators`.
+- `assignment_role`: `primary_driver`, `assistant`, or `relief_driver`.
+- `assigned_at`: assignment timestamp.
+
+**Key constraints**
+
+- The pair `route_plan_id + operator_id` must be unique.
+- A scheduled route must have exactly one primary driver.
+- The route and operators must belong to the same company.
+
+### 3.10 `fuel_prices`
+
+Stores fuel prices used in route estimates.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `fuel_type`: diesel, regular gasoline, or premium gasoline.
+- `price_per_liter`: normalized price in USD per liter.
+- `currency_code`: fixed as `USD`.
+- `source_name`: price source.
+- `source_reference`: optional URL or report reference.
+- `valid_from`, `valid_to`: validity range.
+- `is_active`: current-price indicator.
+- `created_by`: optional foreign key to `profiles`.
+- `created_at`: creation timestamp.
+
+Previous fuel prices should be preserved instead of overwritten.
+
+### 3.11 `emission_factors`
+
+Stores factors used to estimate emissions.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `fuel_type`: type of fuel.
+- `factor_value`: numerical factor.
+- `factor_unit`: initially `kg_co2e_per_liter`.
+- `source_name`: methodology or institution.
+- `source_reference`: optional source reference.
+- `source_version`: optional publication version or year.
+- `valid_from`, `valid_to`: validity range.
+- `is_active`: current-factor indicator.
+- `created_at`: creation timestamp.
+
+Previous emission factors should be preserved instead of overwritten.
+
+### 3.12 `route_calculations`
+
+Stores versioned route results, including distance, duration, fuel, cost, emissions, and map geometry.
+
+**Main fields**
+
+- `id`: UUID primary key.
+- `route_plan_id`: foreign key to `route_plans`.
+- `vehicle_id`: vehicle used in the calculation.
+- `fuel_price_id`: fuel price used.
+- `emission_factor_id`: emission factor used.
+- `calculation_version`: sequential version number.
+- `routing_provider`: external routing provider.
+- `routing_profile`: optional driving profile.
+- `estimated_distance_km`: total distance.
+- `estimated_duration_minutes`: estimated duration.
+- `vehicle_efficiency_snapshot`: vehicle efficiency used.
+- `estimated_fuel_liters`: estimated fuel consumption.
+- `fuel_unit_price_snapshot`: fuel price used.
+- `estimated_fuel_cost`: estimated fuel cost in USD.
+- `emission_factor_snapshot`: emission factor used.
+- `estimated_emissions_kg_co2e`: estimated emissions.
+- `encoded_polyline`: optional map-display geometry.
+- `route_geometry`: optional PostGIS `LineString`.
+- `provider_response`: optional selected provider data in `jsonb`.
+- `is_current`: identifies the active calculation for the route.
+- `calculated_by`: foreign key to `profiles`.
+- `calculated_at`: calculation timestamp.
+
+**Key constraints**
+
+- Only one calculation per route should have `is_current = true`.
+- Recalculating a route creates a new version instead of overwriting prior results.
+- Snapshot fields preserve the exact values used in historical calculations.
+
+## 4. Optional tables
+
+### 4.1 `route_status_history`
+
+Records route status transitions.
+
+**Main fields:** `id`, `route_plan_id`, `previous_status`, `new_status`, `changed_by`, `notes`, and `changed_at`.
+
+### 4.2 `audit_logs`
+
+Records critical changes such as recalculations, route status changes, vehicle deactivation, and user administration.
+
+**Main fields:** `id`, `company_id`, `user_id`, `action`, `entity_type`, `entity_id`, `previous_values`, `new_values`, and `created_at`.
+
+These two tables are useful for traceability but are not required for the first working iteration.
+
+## 5. Main relationships
+
+```text
+companies
+  1 -> N company_members
+  1 -> N vehicles
+  1 -> N operators
+  1 -> N locations
+  1 -> N route_plans
+
+profiles
+  1 -> N company_members
+  1 -> N route_plans
+  1 -> N route_calculations
+
+vehicles
+  1 -> N route_plans
+  1 -> N route_calculations
+
+route_plans
+  1 -> N route_stops
+  1 -> N route_operator_assignments
+  1 -> N route_calculations
+
+operators
+  1 -> N route_operator_assignments
+
+locations
+  1 -> N route_stops
+
+fuel_prices
+  1 -> N route_calculations
+
+emission_factors
+  1 -> N route_calculations
+```
+
+## 6. Calculation rules
+
+### Fuel estimate
+
+```text
+estimated_fuel_liters =
+    estimated_distance_km / vehicle_efficiency_km_per_liter
+```
+
+### Fuel cost estimate
+
+```text
+estimated_fuel_cost =
+    estimated_fuel_liters * fuel_price_per_liter
+```
+
+### Emissions estimate
+
+```text
+estimated_emissions_kg_co2e =
+    estimated_fuel_liters * emission_factor_kg_co2e_per_liter
+```
+
+All results are estimates and must retain the vehicle efficiency, fuel price, and emission factor used in each calculation.
+
+## 7. Derived information
+
+The following values should be calculated through queries or database views instead of being repeatedly stored in `companies`:
+
+- Company fleet: all active company vehicles.
+- Number of active vehicles.
+- Number of active operators.
+- Number of routes by status.
+- Total estimated distance.
+- Total estimated fuel.
+- Total estimated cost.
+- Total estimated emissions.
+
+Dashboard totals should use calculations where `is_current = true`.
+
+## 8. Tables excluded from the prototype
+
+The prototype does not require:
+
+- `fleets`
+- `fleet_vehicles`
+- `route_vehicle_assignments`
+- `route_executions`
+- `execution_vehicles`
+- `execution_operators`
+- `fuel_transactions`
+- `route_expenses`
+- `maintenance_records`
+- `notifications`
+- `countries`
+- `currencies`
+- `exchange_rates`
+- `gps_positions`
+
+These entities can be considered in a future complete product.
+
+## 9. Security requirements
+
+- Every company-owned table must be protected with Supabase Row Level Security.
+- Authenticated users may access only records belonging to their company.
+- The Supabase service-role key must never be exposed to the browser.
+- Routing-provider secrets must remain server-side.
+- Database schema changes must be implemented through versioned migrations.
+- Cross-company references must be prevented through policies, constraints, or validated server operations.
+
+## 10. Recommended implementation order
+
+1. `companies`
+2. `profiles`
+3. `company_members`
+4. `vehicles`
+5. `operators`
+6. `locations`
+7. `fuel_prices`
+8. `emission_factors`
+9. `route_plans`
+10. `route_stops`
+11. `route_operator_assignments`
+12. `route_calculations`
+13. Optional `route_status_history`
+14. Optional `audit_logs`
+
+This sequence respects foreign-key dependencies and supports the complete prototype flow: authentication, company isolation, vehicle and operator management, multi-stop route planning, route calculation, fuel-cost estimation, and emissions estimation.
