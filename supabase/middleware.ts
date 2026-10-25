@@ -1,11 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
+import { getSupabaseConfig } from "./config";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-export const createClient = (request: NextRequest) => {
-  // Create an unmodified response
+export const updateSession = async (request: NextRequest) => {
+  const { url, publishableKey } = getSupabaseConfig();
   let supabaseResponse = NextResponse.next({
     request: {
       headers: request.headers,
@@ -13,15 +11,15 @@ export const createClient = (request: NextRequest) => {
   });
 
   const supabase = createServerClient(
-    supabaseUrl!,
-    supabaseKey!,
+    url,
+    publishableKey,
     {
       cookies: {
         getAll() {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -32,6 +30,24 @@ export const createClient = (request: NextRequest) => {
       },
     },
   );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const pathname = request.nextUrl.pathname
+  const shouldGoToLogin = !user && pathname.startsWith("/dashboard")
+  const shouldGoToDashboard = Boolean(user) && pathname === "/login"
+
+  if (shouldGoToLogin || shouldGoToDashboard) {
+    const redirectUrl = request.nextUrl.clone()
+    redirectUrl.pathname = shouldGoToLogin ? "/login" : "/dashboard"
+    redirectUrl.search = ""
+    const redirectResponse = NextResponse.redirect(redirectUrl)
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie)
+    })
+    return redirectResponse
+  }
 
   return supabaseResponse
 };

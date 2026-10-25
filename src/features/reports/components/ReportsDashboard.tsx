@@ -1,15 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { sampleOperations } from "@/features/estimates/sample-operations";
+import { getSampleOperationsForPeriod, sampleOperations } from "@/features/estimates/sample-operations";
 
 type Period = "30" | "90" | "365";
-
-function getPeriodOperations(period: Period) {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - Number(period));
-  return sampleOperations.filter((operation) => new Date(`${operation.date}T12:00:00`) >= startDate);
-}
 
 function downloadCsv(rows: typeof sampleOperations) {
   const headers = ["Código", "Fecha", "Ruta", "Origen", "Destino", "Vehículo", "Distancia_km", "Costo_USD", "Emisiones_kg_CO2e", "Ahorro_USD", "Reducción_kg_CO2e"];
@@ -33,7 +27,7 @@ function downloadCsv(rows: typeof sampleOperations) {
 
 export function ReportsDashboard() {
   const [period, setPeriod] = useState<Period>("30");
-  const operations = getPeriodOperations(period);
+  const operations = getSampleOperationsForPeriod(Number(period));
   const totalCost = operations.reduce((total, operation) => total + (operation.distanceKm / operation.efficiencyKmPerLiter) * operation.fuelPriceUsdPerLiter, 0);
   const totalEmissions = operations.reduce((total, operation) => total + (operation.distanceKm / operation.efficiencyKmPerLiter) * operation.emissionFactorKgPerLiter, 0);
   const totalSavings = operations.reduce((total, operation) => total + operation.fuelSavingsUsd, 0);

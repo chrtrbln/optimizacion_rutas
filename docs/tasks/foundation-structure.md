@@ -13,6 +13,6 @@ Status: complete.
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm run test`: passed; Node discovered 0 tests because no feature behavior has been implemented.
+- At the time this task closed, Node discovered 0 tests. Test coverage was added later and is documented in `docs/project-quality/test-plan.md`.
 - `npm run build`: passed
 - No secrets or database schema changes added.

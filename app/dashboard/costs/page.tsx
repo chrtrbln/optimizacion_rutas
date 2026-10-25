@@ -1,5 +1,5 @@
-import { CostEstimator } from "@/features/estimates/components/CostEstimator";
+import { ConnectedCostEstimator } from "@/features/estimates/components/ConnectedCostEstimator";
 
 export default function CostsPage() {
-  return <CostEstimator />;
+  return <ConnectedCostEstimator />;
 }

@@ -1,5 +1,5 @@
-import { RoutePlanner } from "@/features/routes/components/RoutePlanner";
+import { RouteOptimizer } from "@/features/routes/components/RouteOptimizer";
 
 export default function RoutesPage() {
-  return <RoutePlanner />;
+  return <RouteOptimizer />;
 }

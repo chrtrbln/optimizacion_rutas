@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { sampleOperations } from "@/features/estimates/sample-operations";
+import { getSampleOperationsForPeriod } from "@/features/estimates/sample-operations";
 
 const illustrativeFactors = {
   Diésel: { value: 2.68, unit: "kg CO2e/litro" },
@@ -11,23 +11,17 @@ const illustrativeFactors = {
 
 type Period = "30" | "90" | "365";
 
-function getPeriodOperations(period: Period) {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - Number(period));
-  return sampleOperations.filter((operation) => new Date(`${operation.date}T12:00:00`) >= startDate);
-}
-
 export function EmissionsEstimator() {
   const [period, setPeriod] = useState<Period>("30");
   const [fuelType, setFuelType] = useState<keyof typeof illustrativeFactors>("Diésel");
   const [distanceKm, setDistanceKm] = useState(67);
   const [efficiency, setEfficiency] = useState(7.2);
-  const [factor, setFactor] = useState(illustrativeFactors.Diésel.value);
+  const [factor, setFactor] = useState<number>(illustrativeFactors.Diésel.value);
 
   const factorOption = illustrativeFactors[fuelType];
   const fuelLiters = distanceKm > 0 && efficiency > 0 ? distanceKm / efficiency : 0;
   const emissions = fuelLiters * factor;
-  const periodOperations = getPeriodOperations(period);
+  const periodOperations = getSampleOperationsForPeriod(Number(period));
   const periodEmissions = periodOperations.reduce(
     (total, operation) => total + (operation.distanceKm / operation.efficiencyKmPerLiter) * operation.emissionFactorKgPerLiter,
     0,

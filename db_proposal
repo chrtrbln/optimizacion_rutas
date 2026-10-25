@@ -20,7 +20,8 @@ This database supports a web prototype for transportation companies operating ex
 - Emissions are stored in kilograms of CO2 equivalent.
 - Authentication is handled by Supabase Auth.
 - PostgreSQL is used through Supabase.
-- PostGIS is optional for geographic points and route geometries.
+- PostGIS is enabled for location points, route stop snapshots, and calculated route geometry.
+- Spatial coordinates use SRID 4326. Points use `geography(Point, 4326)` for meter-based distance operations; route paths use `geometry(LineString, 4326)` for ordered path geometry.
 
 ## 3. Required tables
 
@@ -140,7 +141,7 @@ Stores reusable locations in El Salvador.
 - `department`: Salvadoran department.
 - `district`: municipality or district.
 - `latitude`, `longitude`: geographic coordinates.
-- `geographic_point`: optional PostGIS `Point`.
+- `geographic_point`: PostGIS `geography(Point, 4326)`, populated from longitude and latitude.
 - `contact_name`, `contact_phone`: optional contact information.
 - `average_service_minutes`: optional service-time estimate.
 - `notes`: access or delivery instructions.
@@ -188,7 +189,7 @@ Stores all ordered points in a route, including origin, intermediate stops, and 
 - `name_snapshot`: location name used for the route.
 - `address_snapshot`: address used for the route.
 - `latitude`, `longitude`: coordinate snapshot.
-- `geographic_point`: optional PostGIS `Point`.
+- `geographic_point`: PostGIS `geography(Point, 4326)`, snapshot of the stop coordinates.
 - `estimated_arrival_at`: optional estimated arrival.
 - `service_duration_minutes`: optional service time.
 - `distance_from_previous_km`: optional segment distance.
@@ -285,7 +286,7 @@ Stores versioned route results, including distance, duration, fuel, cost, emissi
 - `emission_factor_snapshot`: emission factor used.
 - `estimated_emissions_kg_co2e`: estimated emissions.
 - `encoded_polyline`: optional map-display geometry.
-- `route_geometry`: optional PostGIS `LineString`.
+- `route_geometry`: optional PostGIS `geometry(LineString, 4326)` containing the calculated route path.
 - `provider_response`: optional selected provider data in `jsonb`.
 - `is_current`: identifies the active calculation for the route.
 - `calculated_by`: foreign key to `profiles`.
@@ -296,6 +297,11 @@ Stores versioned route results, including distance, duration, fuel, cost, emissi
 - Only one calculation per route should have `is_current = true`.
 - Recalculating a route creates a new version instead of overwriting prior results.
 - Snapshot fields preserve the exact values used in historical calculations.
+- A GiST index on `route_geometry` supports spatial lookup and intersection queries.
+
+### Spatial data and indexes
+
+Enable the Supabase `postgis` extension before creating the tables. Use `geography(Point, 4326)` for reusable locations and route-stop coordinate snapshots so distance calculations use meters on the Earth's surface. The latitude and longitude columns remain as convenient input/display fields and must be kept consistent with the point value by the application or a database trigger. Use `geometry(LineString, 4326)` for route paths, where path ordering and mapping operations are useful. Add GiST indexes to the point and line geometry columns for spatial filtering. Other tables contain scalar, categorical, or financial data and do not benefit from PostGIS.
 
 ## 4. Optional tables
 

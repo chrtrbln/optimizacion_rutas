@@ -1,4 +1,4 @@
-export type VehicleType = "Camión" | "Pickup" | "Van";
+export type VehicleType = "Camión" | "Pickup" | "Van" | "Otro";
 export type FuelType = "Diésel" | "Gasolina regular" | "Gasolina superior";
 export type VehicleStatus = "Disponible" | "Asignado" | "Mantenimiento" | "Inactivo";
 

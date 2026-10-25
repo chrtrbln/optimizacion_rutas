@@ -1,0 +1,160 @@
+DOCUMENTO ACADEMICO DEL PROYECTO TRAZA
+Descripcion del proyecto, arquitectura y procesos de gestion
+
+Nota para completar el documento
+Este texto se elaboro a partir de la implementacion y documentacion encontrada en el repositorio. Los datos de ProjectLibre, las capturas de evidencia, la ejecucion de una prueba piloto y la publicacion efectiva en Vercel no se pueden confirmar con los archivos revisados. Por ello, esos elementos se identifican como pendientes de completar con evidencia real; no deben sustituirse por fechas, porcentajes o resultados supuestos.
+
+
+DESCRIPCION DEL PROYECTO
+
+Traza es un prototipo web de apoyo a la planificacion y analisis de operaciones de transporte. Su proposito es reunir en una sola interfaz el acceso de usuarios, la consulta de vehiculos y ubicaciones empresariales, la estimacion de recorridos con varias paradas y la consulta de indicadores de costos y emisiones. El sistema esta orientado a apoyar la toma de decisiones logistica; sus valores de demostracion no son datos oficiales ni deben utilizarse como estimaciones operativas definitivas.
+
+El prototipo permite que un usuario autenticado consulte ubicaciones y vehiculos disponibles asociados a su empresa, seleccione varios puntos y solicite a OSRM una geometria, distancia, duracion y orden recomendado de las paradas. Tambien consulta y administra vehiculos y membresias, persiste los calculos de ruta y presenta costos, emisiones y reportes a partir de los calculos guardados. La disponibilidad de estas funciones depende de aplicar las politicas y funciones SQL de Supabase descritas en `supabase/application_rls.sql`.
+
+
+ARQUITECTURA DEL PROYECTO
+
+La aplicacion utiliza Next.js con App Router y React para presentar las paginas y componentes de la interfaz. TypeScript tipa los datos y las funciones, mientras Tailwind CSS se emplea para el diseno visual. La organizacion del codigo separa paginas, componentes y funcionalidades de autenticacion, rutas, flota, estimaciones y reportes.
+
+La autenticacion y el acceso a datos se integran con Supabase. Hay clientes para navegador y servidor, y el esquema SQL contempla empresas, perfiles, membresias, vehiculos, operadores, ubicaciones, rutas, paradas y snapshots de calculo. El planificador y los modulos de flota, costos, emisiones y reportes consultan datos de la empresa activa. `supabase/application_rls.sql` contiene politicas RLS, funciones de membresia y persistencia; debe aplicarse en Supabase SQL Editor despues del esquema para habilitar el flujo completo.
+
+El calculo de recorridos se realiza desde el endpoint de servidor /api/routing/trip. Este valida la sesion, la membresia activa, que las ubicaciones pertenezcan a la empresa y que la solicitud contenga entre dos y doce puntos validos. Luego consulta el adaptador OSRM, que utiliza el servicio Route para dos puntos o Trip para mas de dos y devuelve distancia, duracion, geometria y orden de paradas. El servicio publico de demostracion es el valor predeterminado; para produccion se recomienda configurar un servicio OSRM administrado.
+
+La interfaz representa la geometria de la ruta, pero la documentacion del proyecto indica que no se ha conectado un mapa base cartografico. Por tanto, aunque OSRM utiliza datos de red vial asociados a OpenStreetMap, no debe afirmarse que el prototipo ya integra un mapa interactivo de OSM.
+
+Los calculos guardados conservan distancia, duracion, rendimiento, precio y factor utilizados. C3 y C4 consultan esos snapshots; permiten escenarios editables que no alteran el historial. C5 resume las operaciones reales guardadas para la empresa y permite exportar CSV o imprimir/guardar como PDF. No se integra automaticamente un feed oficial de DGEHM ni un catalogo validado de factores IPCC/EPA/GLEC.
+
+
+4.1 DIRIGIR LA EJECUCION DEL PROYECTO
+
+La ejecucion se organizo por funcionalidades para avanzar desde la estructura de la aplicacion hasta los modulos de autenticacion, flota, planificacion, estimaciones y reportes. La separacion del codigo por areas funcionales permitio trabajar cada componente de forma mas ordenada y relacionar la interfaz con los servicios de datos. Para documentar formalmente la coordinacion del equipo, se deben complementar estas actividades con los responsables, reuniones, fechas, asignaciones y acuerdos registrados en ProjectLibre u otra evidencia del curso; dichos registros no estan disponibles en el repositorio.
+
+El entorno de desarrollo se preparo como una aplicacion web con Next.js, React, TypeScript y Tailwind CSS, usando npm para administrar dependencias y ejecutar tareas de desarrollo, compilacion, analisis estatico y pruebas. Se establecieron scripts para iniciar la aplicacion, construirla, revisar el codigo, verificar tipos y ejecutar las pruebas disponibles. El codigo se encuentra organizado en el directorio del proyecto. La existencia de un repositorio remoto, su fecha de creacion y su historial de commits deben acreditarse con la URL o capturas de la plataforma Git correspondiente, ya que no se pueden confirmar con los archivos consultados.
+
+La capa de datos se conecto con Supabase mediante clientes de navegador y servidor. Se preparo un esquema relacional para empresas, perfiles, miembros, vehiculos, operadores, ubicaciones, planes de ruta y paradas, junto con informacion de referencia para combustible y emisiones. Se documentaron scripts SQL para crear tablas, cargar datos de prueba y configurar politicas RLS. Para el funcionamiento del planificador es necesario aplicar las politicas de lectura por empresa en el proyecto Supabase y disponer de una cuenta de prueba autenticada.
+
+La autenticacion implementa el inicio de sesion por correo y contrasena mediante Supabase Auth. El modulo de flota consulta vehiculos y miembros de la empresa; permite crear o editar vehiculos y administrar roles/estado de membresias. Para agregar un miembro, la cuenta debe existir previamente en Supabase Auth. La creacion de cuentas e invitaciones no se realiza desde el navegador.
+
+En el planificador, el usuario selecciona origen, destino, vehiculo y puntos intermedios. El servidor valida la pertenencia de las ubicaciones, consulta el vehiculo y los factores vigentes de la empresa, solicita el recorrido a OSRM y persiste ruta, paradas ordenadas, geometria y snapshots mediante una funcion SQL transaccional. OSRM Trip es heuristico y no garantiza la ruta de menor distancia ni implementa por si mismo algoritmos como Dijkstra o A*.
+
+El modulo de costos calcula litros como distancia/rendimiento y costo como litros por precio unitario. El modulo de emisiones calcula CO2e como litros por factor. Ambos muestran operaciones y referencias almacenadas con fuente, version y vigencia, y permiten escenarios locales sin modificar el historial. El dashboard resume los calculos del periodo y exporta sus snapshots a CSV o impresion/PDF. El esquema no contiene un baseline para comparar ahorros, por lo que no se presentan ahorros inferidos.
+
+Como control de calidad se agregaron pruebas unitarias de calculos y adaptador OSRM, pruebas de integracion de consultas Supabase, pruebas de seguridad para validacion de entradas y estructura RLS, y una prueba opcional de aislamiento con dos usuarios. `docs/project-quality/test-report.md` registra los resultados disponibles. La prueba de aislamiento en vivo requiere dos cuentas de prueba de empresas distintas y sus tokens; si no se configuran, el caso se omite. Typecheck se omite en esta revision por solicitud del equipo y no debe presentarse como aprobado.
+
+La configuracion del proyecto contempla la posibilidad de desplegar Next.js en Vercel, pero la documentacion revisada solo describe la plataforma de forma general y no acredita una publicacion efectiva. Para cerrar esta actividad se debe adjuntar la URL del despliegue y evidencia de que las variables de entorno de Supabase y OSRM se configuraron sin exponer secretos, junto con una verificacion basica de la aplicacion publicada.
+
+MODULO                  FUNCION DESARROLLADA                                  EVIDENCIA QUE SE DEBE ADJUNTAR
+Autenticacion           Inicio de sesion con Supabase Auth y proteccion        Captura de inicio/cierre de sesion y acceso
+                        de rutas privadas                                     con una cuenta de prueba
+Flota                   Lectura/escritura de vehiculos y membresias por        Capturas de CRUD y perfiles; requiere aplicar
+                        empresa; miembros existentes de Auth                   application_rls.sql y probar en Supabase
+Rutas y paradas         OSRM, validacion tenant y persistencia de ruta,         Captura de ruta guardada, calculo y PostGIS;
+                        paradas y snapshots                                  anotar ausencia de mapa base y limites OSRM
+Costos                  Costo desde calculos guardados y precio snapshot;       Captura de historial y escenario; indicar que
+                        escenario editable no persistente                     no hay feed DGEHM integrado
+Emisiones               CO2e desde factor snapshot versionado; escenario       Captura de fuente/version; no declarar factores
+                        editable no persistente                                oficiales sin validarlos
+Dashboard y reportes    Totales reales de calculos guardados, CSV e             Captura del periodo y CSV; ahorro no disponible
+                        impresion/guardar PDF                                 por falta de baseline en el esquema
+
+EVIDENCIA DE PROJECTLIBRE
+
+El repositorio no contiene el archivo de ProjectLibre ni un registro verificable del avance planificado. Para completar esta seccion, se debe consultar el cronograma actualizado despues de resolver las sobreasignaciones y trasladar los datos exactos del archivo. No se deben estimar porcentajes ni fechas a partir de la existencia del codigo.
+
+Porcentaje completado del proyecto: [ingresar el porcentaje mostrado por ProjectLibre]
+Fecha de corte del avance: [dd/mm/aaaa]
+Sobreasignaciones resueltas antes de actualizar el avance: [si/no; indicar evidencia]
+
+ACTIVIDAD                         PORCENTAJE   FECHA REAL DE INICIO   FECHA REAL DE FIN   TRABAJO REAL   RESPONSABLE
+Configuracion del entorno         [dato]       [dato]                 [dato]              [horas]        [nombre]
+Estructura y repositorio          [dato]       [dato]                 [dato]              [horas]        [nombre]
+Autenticacion y Supabase          [dato]       [dato]                 [dato]              [horas]        [nombre]
+Flota y operadores                [dato]       [dato]                 [dato]              [horas]        [nombre]
+Rutas e integracion OSRM          [dato]       [dato]                 [dato]              [horas]        [nombre]
+Costos y emisiones                [dato]       [dato]                 [dato]              [horas]        [nombre]
+Dashboard y reportes              [dato]       [dato]                 [dato]              [horas]        [nombre]
+Pruebas y correccion de defectos  [dato]       [dato]                 [dato]              [horas]        [nombre]
+Despliegue y validacion           [dato]       [dato]                 [dato]              [horas]        [nombre]
+
+Adjuntar una captura de ProjectLibre donde se vean el porcentaje completado, las tareas finalizadas, las fechas reales, el trabajo y los responsables. La guia del curso solicita registrar el avance despues de resolver las sobreasignaciones; conservar evidencia de esa revision.
+
+
+4.2 GESTIONAR LA CALIDAD DEL PROYECTO
+
+La calidad del prototipo se abordo mediante la correspondencia entre los requisitos funcionales y los modulos de la aplicacion, validaciones en formularios y verificaciones tecnicas de compilacion, tipos y estilo. En el endpoint de rutas se valida la sesion del usuario, el numero de puntos, el formato de la solicitud y la pertenencia de las ubicaciones a la empresa activa. En la interfaz de acceso se requieren correo y contrasena, y los formularios de vehiculos revisan, entre otros aspectos, la duplicidad de placa. Estas validaciones son controles implementados; no constituyen por si solas evidencia de una campaña completa de pruebas.
+
+El repositorio incluye pruebas unitarias de formulas y respuesta OSRM, pruebas de integracion con un cliente Supabase simulado y comprobaciones estaticas de seguridad para validacion de entrada y RLS. Un reporte anterior registro 16 pruebas locales aprobadas antes de incorporar el caso opcional de aislamiento multiempresa en vivo. El caso en vivo requiere dos cuentas y no se confirma como ejecutado. En esta revision se solicito omitir typecheck; el resultado no debe presentarse como aprobado. Los comandos y el estado detallado se documentan en `docs/project-quality/test-plan.md` y `docs/project-quality/test-report.md`.
+
+La revision de seguridad basica contempla autenticacion requerida para el endpoint de rutas, validacion de entradas, comprobacion de membresia/vehiculo/ubicaciones de la empresa, consultas con filtro tenant y politicas RLS para las tablas del prototipo. Las funciones de persistencia y administracion de membresias usan permisos de base de datos y search_path restringido. Las pruebas estaticas de seguridad se ejecutan localmente; la prueba negativa en vivo de aislamiento requiere aplicar `application_rls.sql` y configurar dos cuentas de prueba. Esto es una revision basica para un prototipo academico, no una auditoria ni certificacion de seguridad.
+
+Los criterios de aceptacion deben confirmarse contra la especificacion acordada por el equipo y el docente/cliente. El codigo disponible permite verificar que existen pantallas y formulas para las funciones descritas, pero la aceptacion formal de cada requisito, la prueba piloto y la correccion de defectos deben sustentarse con actas, casos ejecutados o capturas fechadas.
+
+FUNCION                  PRUEBA A REALIZAR                                  RESULTADO ESPERADO                         ESTADO SEGUN EVIDENCIA DISPONIBLE
+Formulas                 Probar distancias, rendimientos y valores limite     Litros, costo y kg CO2e correctos          Pruebas unitarias locales implementadas
+Adaptador OSRM           Simular Trip, Route, NoRoute y geometria invalida    Orden/puntos validados o error controlado   Pruebas unitarias locales implementadas
+Consulta de operaciones Cliente Supabase simulado con filtros de empresa       Mapea snapshots y no omite tenant filter    Prueba de integracion local implementada
+Validacion de solicitud  UUID invalido, IDs repetidos, 1/13 paradas           Rechazo HTTP antes de consultar OSRM        Pruebas de seguridad locales implementadas
+Politicas RLS            Verificar tablas y roles en el SQL versionado         Todas las tablas protegidas por tenant      Comprobacion estatica implementada
+Cruce entre empresas    Dos usuarios de empresas distintas y vehiculo ajeno   Usuario A no obtiene fila de empresa B      Prueba opcional; no ejecutada sin tokens
+Integracion real         Usuario autenticado calcula y persiste una ruta        Ruta, paradas y snapshots visibles en C3-C5  Requiere aplicar SQL y probar en Supabase
+Lint y compilacion       Ejecutar ESLint y build de produccion                 Sin errores                                Resultados finales no capturados en esta revision
+Typecheck                Ejecutar npm run typecheck                            Sin errores TypeScript                      Omitido por solicitud
+
+ProjectLibre debe mostrar en esta seccion las actividades de prueba, su duracion y sus responsables. Registrar las fechas reales, el trabajo realizado y el resultado observado unicamente despues de ejecutar cada caso.
+
+
+4.3 GESTION DEL CONOCIMIENTO DEL PROYECTO
+
+El conocimiento tecnico se distribuye principalmente en el codigo fuente, los scripts SQL y los documentos README y notas de tareas incluidos en el repositorio. El codigo es la referencia para la arquitectura de la interfaz, las validaciones, las consultas a Supabase, el adaptador OSRM y los calculos. El esquema y los scripts SQL describen el modelo de datos, las semillas para datos de prueba y las politicas de acceso. Los documentos por funcionalidad registran decisiones y limites tecnicos, como el uso de valores ilustrativos, la ausencia de persistencia de rutas y la necesidad de configurar RLS.
+
+La informacion puede compartirse mediante el repositorio y revisiones de cambios, evitando incluir credenciales o secretos. Se agrego `.github/workflows/quality.yml` para ejecutar lint, pruebas y build en pushes a `main` y pull requests. La existencia de este archivo no demuestra una ejecucion exitosa: deben adjuntarse enlaces o capturas de ejecuciones reales de GitHub Actions. La URL del remoto, los pull requests, las revisiones por pares y la proteccion de ramas no se verificaron durante esta revision. El paquete de calidad en `docs/project-quality/` organiza caracteristicas, plan de pruebas, reporte y preparacion para despliegue.
+
+El procedimiento de despliegue debe incluir la instalacion de dependencias, configuracion segura de variables de entorno, aplicacion controlada del esquema y las politicas RLS, compilacion de produccion, publicacion en Vercel y una verificacion posterior. Antes de exponer el sistema se deben reemplazar los valores demostrativos por fuentes autorizadas y comprobar autenticacion, aislamiento de empresas y disponibilidad del servicio OSRM. La documentacion actual describe la preparacion del esquema y el uso de OSRM, pero no acredita un despliegue real en Vercel.
+
+ELEMENTO DE CONOCIMIENTO       ESTADO EN EL PROYECTO Y FORMA DE COMPARTIRLO
+Repositorio de codigo          Codigo fuente organizado por funcionalidades; GitHub Actions
+                               configurado en `.github/workflows/quality.yml`; adjuntar URL y
+                               ejecuciones reales del remoto si estan disponibles
+Arquitectura                   Descrita parcialmente en este documento; conservar diagrama
+                               actualizado de interfaz, API, Supabase y OSRM
+Modelo de base de datos        Esquema disponible en supabase_create_tables.sql; elaborar o
+                               adjuntar diagrama entidad-relacion
+Especificaciones               Hay notas tecnicas por tareas y modulos; consolidar requisitos,
+                               reglas de negocio y criterios de aceptacion aprobados
+Manual de usuario              No identificado como documento completo; preparar instrucciones
+                               de acceso, planificacion, estimaciones y reportes
+Manual tecnico                 Hay README y scripts SQL; completar instalacion, configuracion,
+                               variables requeridas y mantenimiento
+Registro de decisiones         Hay decisiones y limites descritos en notas tecnicas; formalizar
+                               fecha, contexto, opciones, decision y responsable
+Lecciones aprendidas           Registrar situaciones, efectos y acciones preventivas al cierre
+Evidencias de pruebas          Plan y reporte en `docs/project-quality/`; agregar captura de
+                               GitHub Actions y resultado del test RLS en vivo
+Procedimiento de despliegue    Lista de preparacion en `docs/project-quality/deployment-readiness.md`;
+                               RLS, entorno, build y URL de Vercel siguen pendientes de evidencia
+
+LECCIONES APRENDIDAS
+
+SITUACION                         LECCION OBTENIDA                                  RECOMENDACION
+Integracion cartografica          El proveedor externo y la disponibilidad de        Hacer una prueba tecnica temprana,
+                                  datos condicionan el planificador. En este          confirmar limites del proveedor y
+                                  prototipo se consulta OSRM, pero no se conecta      definir alternativa administrada.
+                                  un mapa base.
+Estimacion de tareas              Las duraciones deben considerar implementacion,    Incluir margen explicito para pruebas,
+                                  integracion, validacion y correccion, no solo      correcciones y configuracion externa.
+                                  codificacion.
+Trabajo del equipo                 Las tareas que comparten responsables o recursos  Revisar la carga semanal y resolver
+                                  pueden producir sobreasignaciones y retrasos.      sobreasignaciones antes de registrar
+                                                                                    el avance en ProjectLibre.
+Servicios gratuitos                Los servicios publicos o gratuitos pueden tener  Verificar limites, condiciones y
+                                  restricciones de disponibilidad, uso o capacidad. alternativas antes de depender de ellos.
+Datos de demostracion              Los valores sinteticos permiten probar pantallas,  Etiquetar claramente las muestras y
+                                  pero no justifican decisiones operativas.          reemplazarlas por fuentes validadas.
+Seguridad multiempresa             La consulta de datos por empresa depende de que   Aplicar RLS y probar con usuarios de
+                                  las politicas esten realmente configuradas, no     dos empresas antes de aceptar el
+                                  solo escritas en un script.                        aislamiento como criterio cumplido.
+
+
+CIERRE
+
+El repositorio evidencia un prototipo con autenticacion, gestion de flota/membresias y lecturas por empresa, integracion OSRM con persistencia de rutas y snapshots, reportes por calculos guardados, pruebas locales basicas y un flujo GitHub Actions configurado. Aun requieren evidencia externa la aplicacion de `application_rls.sql` en Supabase, la prueba de aislamiento con dos cuentas, la ejecucion final del workflow, el build/typecheck acordado y la publicacion en Vercel. OSRM no implementa Dijkstra/A*, no existe mapa base ni feed oficial de combustible/factores, y no se calculan ahorros sin baseline. Para la entrega academica, los datos de ProjectLibre, capturas, resultados reales de CI y URL de despliegue deben agregarse desde las herramientas del equipo.

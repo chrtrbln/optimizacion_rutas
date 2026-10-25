@@ -1,17 +1,16 @@
 # Fleet Management (C1)
 
-Status: implemented; validation skipped by request.
+Status: implemented with Supabase data access; remote RLS setup required.
 
 ## Implemented
 
-- Replaced the fleet placeholder with vehicle inventory and profile management tabs.
-- Added vehicle search and status filtering, with summary counts and average km/liter.
-- Added local add/edit flows for vehicle plate, code, make/model, model year, type, fuel, efficiency, and status. Duplicate plates are rejected within the current company demo list.
-- Added local profile creation, company role changes, and active/inactive toggles.
-- Added explicit domain types and isolated sample data. All state is in-memory and does not persist beyond the current page session.
-- Labeled sample data and documented future Supabase/Auth integration boundaries.
+- Replaced local demo arrays with tenant-scoped Supabase vehicle and member reads.
+- Added persistent vehicle create/update, duplicate-plate handling, role changes, member activation, and existing-Auth-user membership creation.
+- Added read/write controls based on the current admin/planner/viewer role.
+- Added runtime validation/mapping of database records in `src/features/vehicles/data/fleet-data.ts`.
+- New memberships require an existing Supabase Auth account; the client never creates passwords or uses a service-role key.
 
 ## Verification
 
-- Validation commands intentionally not run per request.
-- No backend, database, authentication, or secrets were added.
+- Apply `supabase/application_rls.sql` in the Supabase project before remote reads/writes.
+- See `docs/project-quality/test-report.md` for the current test/check record.

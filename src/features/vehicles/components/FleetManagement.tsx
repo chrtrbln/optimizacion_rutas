@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
-import { demoProfiles, demoVehicles } from "@/features/vehicles/demo-data";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  addCompanyProfile,
+  loadFleetData,
+  saveFleetVehicle,
+  updateCompanyProfile,
+} from "@/features/vehicles/data/fleet-data";
 import type {
   CompanyProfile,
   CompanyRole,
@@ -14,7 +19,7 @@ import type {
 type FleetTab = "vehicles" | "people";
 type VehicleDraft = Omit<FleetVehicle, "id">;
 
-const vehicleTypes: VehicleType[] = ["Camión", "Pickup", "Van"];
+const vehicleTypes: VehicleType[] = ["Camión", "Pickup", "Van", "Otro"];
 const fuelTypes: FuelType[] = ["Diésel", "Gasolina regular", "Gasolina superior"];
 const vehicleStatuses: VehicleStatus[] = [
   "Disponible",
@@ -62,7 +67,7 @@ function VehicleDialog({
   vehicle: FleetVehicle | null;
   vehicles: FleetVehicle[];
   onClose: () => void;
-  onSave: (vehicle: FleetVehicle) => void;
+  onSave: (vehicle: FleetVehicle) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<VehicleDraft>(
     vehicle
@@ -79,13 +84,15 @@ function VehicleDialog({
       : emptyVehicle,
   );
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   function updateDraft<Key extends keyof VehicleDraft>(key: Key, value: VehicleDraft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErrorMessage("");
     const normalizedPlate = draft.plateNumber.trim().toLocaleUpperCase("es-SV");
     const duplicatePlate = vehicles.some(
       (current) =>
@@ -98,14 +105,21 @@ function VehicleDialog({
       return;
     }
 
-    onSave({
-      ...draft,
-      id: vehicle?.id ?? `vehicle-${crypto.randomUUID()}`,
-      plateNumber: normalizedPlate,
-      internalCode: draft.internalCode.trim(),
-      makeModel: draft.makeModel.trim(),
-    });
-    onClose();
+    setIsSaving(true);
+    try {
+      await onSave({
+        ...draft,
+        id: vehicle?.id ?? "",
+        plateNumber: normalizedPlate,
+        internalCode: draft.internalCode.trim(),
+        makeModel: draft.makeModel.trim(),
+      });
+      onClose();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar la unidad.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -223,12 +237,13 @@ function VehicleDialog({
             <button
               className="h-10 rounded-md border border-[#cfd8ce] px-4 text-sm font-medium text-[#40564a] hover:bg-[#f0f3ee]"
               onClick={onClose}
+              disabled={isSaving}
               type="button"
             >
               Cancelar
             </button>
-            <button className="h-10 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white hover:bg-[#174536]" type="submit">
-              Guardar unidad
+            <button className="h-10 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white hover:bg-[#174536] disabled:opacity-60" disabled={isSaving} type="submit">
+              {isSaving ? "Guardando..." : "Guardar unidad"}
             </button>
           </div>
         </form>
@@ -333,13 +348,36 @@ function StatusBadge({ status }: { status: VehicleStatus }) {
 }
 
 export function FleetManagement() {
-  const [vehicles, setVehicles] = useState(demoVehicles);
-  const [profiles, setProfiles] = useState(demoProfiles);
+  const [vehicles, setVehicles] = useState<FleetVehicle[]>([]);
+  const [profiles, setProfiles] = useState<CompanyProfile[]>([]);
+  const [companyRole, setCompanyRole] = useState<"admin" | "planner" | "viewer">("viewer");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadCount, setReloadCount] = useState(0);
+  const [actionMessage, setActionMessage] = useState("");
   const [activeTab, setActiveTab] = useState<FleetTab>("vehicles");
   const [search, setSearch] = useState("");
   const [vehicleStatus, setVehicleStatus] = useState("Todos los estados");
   const [vehicleDialog, setVehicleDialog] = useState<FleetVehicle | "new" | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+    loadFleetData()
+      .then((data) => {
+        if (!isActive) return;
+        setCompanyRole(data.role);
+        setVehicles(data.vehicles);
+        setProfiles(data.profiles);
+      })
+      .catch((error: unknown) => {
+        if (isActive) setLoadError(error instanceof Error ? error.message : "No se pudo cargar la flota.");
+      })
+      .finally(() => {
+        if (isActive) setIsLoading(false);
+      });
+    return () => { isActive = false; };
+  }, [reloadCount]);
 
   const filteredVehicles = vehicles.filter((vehicle) => {
     const query = search.trim().toLocaleLowerCase("es-SV");
@@ -357,25 +395,53 @@ export function FleetManagement() {
     ? vehicles.reduce((total, vehicle) => total + vehicle.fuelEfficiencyKmPerLiter, 0) / vehicles.length
     : 0;
 
-  function saveVehicle(vehicle: FleetVehicle) {
+  async function saveVehicle(vehicle: FleetVehicle) {
+    const savedVehicle = await saveFleetVehicle(vehicle);
     setVehicles((current) => {
-      const exists = current.some((item) => item.id === vehicle.id);
+      const exists = current.some((item) => item.id === savedVehicle.id);
       return exists
-        ? current.map((item) => item.id === vehicle.id ? vehicle : item)
-        : [vehicle, ...current];
+        ? current.map((item) => item.id === savedVehicle.id ? savedVehicle : item)
+        : [...current, savedVehicle].sort((first, second) => first.plateNumber.localeCompare(second.plateNumber));
     });
+    setActionMessage("Unidad guardada en Supabase.");
   }
 
-  function updateProfileRole(profileId: string, role: CompanyRole) {
-    setProfiles((current) => current.map((profile) =>
-      profile.id === profileId ? { ...profile, role } : profile,
-    ));
+  async function updateProfileRole(profileId: string, role: CompanyRole) {
+    setActionMessage("");
+    try {
+      await updateCompanyProfile(profileId, { role });
+      setProfiles((current) => current.map((profile) => profile.id === profileId ? { ...profile, role } : profile));
+      setActionMessage("Rol actualizado.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "No se pudo actualizar el rol.");
+    }
   }
 
-  function toggleProfile(profileId: string) {
-    setProfiles((current) => current.map((profile) =>
-      profile.id === profileId ? { ...profile, isActive: !profile.isActive } : profile,
-    ));
+  async function toggleProfile(profileId: string) {
+    const profile = profiles.find((item) => item.id === profileId);
+    if (!profile) return;
+    setActionMessage("");
+    try {
+      await updateCompanyProfile(profileId, { isActive: !profile.isActive });
+      setProfiles((current) => current.map((item) => item.id === profileId ? { ...item, isActive: !item.isActive } : item));
+      setActionMessage("Acceso del perfil actualizado.");
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "No se pudo actualizar el acceso.");
+    }
+  }
+
+  if (isLoading) {
+    return <p className="border border-[#dfe6de] bg-white px-5 py-8 text-sm text-[#64736b]" role="status">Cargando vehículos y perfiles de tu empresa...</p>;
+  }
+
+  if (loadError) {
+    return (
+      <section className="border border-[#ead7cd] bg-[#fff9f5] p-5" role="alert">
+        <h1 className="font-semibold text-[#793f31]">No se pudieron cargar los datos de la flota</h1>
+        <p className="mt-2 text-sm leading-6 text-[#805b50]">{loadError}</p>
+        <button className="mt-4 h-10 rounded-md border border-[#d9b8ab] px-4 text-sm font-semibold text-[#79483a] hover:bg-[#fff1ea]" onClick={() => { setIsLoading(true); setLoadError(""); setReloadCount((value) => value + 1); }} type="button">Reintentar</button>
+      </section>
+    );
   }
 
   return (
@@ -392,9 +458,9 @@ export function FleetManagement() {
             Administra las unidades, su rendimiento y quién tiene acceso al espacio de trabajo.
           </p>
         </div>
-        <span className="inline-flex min-h-8 items-center gap-2 border border-[#e1d2b7] bg-[#fff9ed] px-3 text-xs font-medium text-[#795e34]">
-          <span className="size-1.5 rounded-full bg-[#d88651]" />
-          Vista previa · datos de ejemplo
+        <span className="inline-flex min-h-8 items-center gap-2 border border-[#d9e2d8] bg-white px-3 text-xs font-medium text-[#526a5d]">
+          <span className="size-1.5 rounded-full bg-[#5b8d68]" />
+          Datos de Supabase
         </span>
       </div>
 
@@ -438,8 +504,9 @@ export function FleetManagement() {
         </div>
         {activeTab === "vehicles" ? (
           <button
-            className="mb-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white transition hover:bg-[#174536]"
+            className="mb-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white transition hover:bg-[#174536] disabled:opacity-50"
             onClick={() => setVehicleDialog("new")}
+            disabled={companyRole === "viewer"}
             type="button"
           >
             <span aria-hidden="true" className="text-lg leading-none">+</span>
@@ -447,8 +514,9 @@ export function FleetManagement() {
           </button>
         ) : (
           <button
-            className="mb-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white transition hover:bg-[#174536]"
+            className="mb-2 inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#1d5544] px-4 text-sm font-semibold text-white transition hover:bg-[#174536] disabled:opacity-50"
             onClick={() => setProfileDialogOpen(true)}
+            disabled={companyRole !== "admin"}
             type="button"
           >
             <span aria-hidden="true" className="text-lg leading-none">+</span>
@@ -456,6 +524,8 @@ export function FleetManagement() {
           </button>
         )}
       </div>
+
+      {actionMessage && <p aria-live="polite" className="mt-3 text-sm text-[#526a5d]" role="status">{actionMessage}</p>}
 
       {activeTab === "vehicles" ? (
         <section aria-label="Vehículos de la empresa" className="mt-5">
@@ -519,6 +589,7 @@ export function FleetManagement() {
                           aria-label={`Editar ${vehicle.plateNumber}`}
                           className="min-h-9 rounded px-2 text-xs font-semibold text-[#28634e] underline-offset-4 hover:bg-[#eef4ee] hover:underline"
                           onClick={() => setVehicleDialog(vehicle)}
+                          disabled={companyRole === "viewer"}
                           type="button"
                         >
                           Editar
@@ -536,7 +607,7 @@ export function FleetManagement() {
             </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-[#77847c]">
-            El rendimiento se expresa en km por litro. Los cambios se conservan solo durante esta sesión de vista previa.
+            El rendimiento se expresa en km por litro. Los cambios se guardan en Supabase para esta empresa.
           </p>
         </section>
       ) : (
@@ -545,7 +616,7 @@ export function FleetManagement() {
             <p className="text-sm text-[#66766d]">
               {activeProfiles} perfiles activos de {profiles.length}
             </p>
-            <p className="text-xs text-[#77847c]">Los perfiles de ejemplo no representan usuarios reales.</p>
+            <p className="text-xs text-[#77847c]">Los perfiles están vinculados a usuarios existentes de Supabase Auth.</p>
           </div>
           <div className="overflow-hidden border border-[#dfe6de] bg-white">
             <div className="overflow-x-auto">
@@ -571,8 +642,9 @@ export function FleetManagement() {
                         </label>
                         <select
                           className="h-9 rounded-md border border-[#d6dfd5] bg-white px-2 text-xs text-[#40564a] outline-none focus:border-[#36715c]"
+                          disabled={companyRole !== "admin"}
                           id={`role-${profile.id}`}
-                          onChange={(event) => updateProfileRole(profile.id, event.target.value as CompanyRole)}
+                          onChange={(event) => void updateProfileRole(profile.id, event.target.value as CompanyRole)}
                           value={profile.role}
                         >
                           {companyRoles.map((companyRole) => <option key={companyRole}>{companyRole}</option>)}
@@ -587,7 +659,8 @@ export function FleetManagement() {
                         <button
                           aria-label={`${profile.isActive ? "Desactivar" : "Activar"} perfil de ${profile.fullName}`}
                           className="min-h-9 rounded px-2 text-xs font-semibold text-[#28634e] underline-offset-4 hover:bg-[#eef4ee] hover:underline"
-                          onClick={() => toggleProfile(profile.id)}
+                          disabled={companyRole !== "admin" || (profile.role === "Administrador" && profile.isActive)}
+                          onClick={() => void toggleProfile(profile.id)}
                           type="button"
                         >
                           {profile.isActive ? "Desactivar" : "Activar"}
@@ -600,7 +673,7 @@ export function FleetManagement() {
             </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-[#77847c]">
-            Los roles y estados son locales. Contraseñas, invitaciones y autenticación se gestionarán al conectar Supabase Auth.
+            Contraseñas e invitaciones se gestionan en Supabase Auth; esta pantalla administra roles y membresías de empresa.
           </p>
         </section>
       )}
@@ -616,7 +689,12 @@ export function FleetManagement() {
       {profileDialogOpen && (
         <ProfileDialog
           onClose={() => setProfileDialogOpen(false)}
-          onSave={(profile) => setProfiles((current) => [profile, ...current])}
+          onSave={async (input) => {
+            await addCompanyProfile(input);
+            const data = await loadFleetData();
+            setProfiles(data.profiles);
+            setActionMessage("Perfil agregado a la empresa.");
+          }}
         />
       )}
     </>

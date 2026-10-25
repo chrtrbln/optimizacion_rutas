@@ -1,5 +1,5 @@
-import { ReportsDashboard } from "@/features/reports/components/ReportsDashboard";
+import { ConnectedReportsDashboard } from "@/features/reports/components/ConnectedReportsDashboard";
 
 export default function ReportsPage() {
-  return <ReportsDashboard />;
+  return <ConnectedReportsDashboard />;
 }

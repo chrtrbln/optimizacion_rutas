@@ -1,5 +1,5 @@
-import { EmissionsEstimator } from "@/features/estimates/components/EmissionsEstimator";
+import { ConnectedEmissionsEstimator } from "@/features/estimates/components/ConnectedEmissionsEstimator";
 
 export default function EmissionsPage() {
-  return <EmissionsEstimator />;
+  return <ConnectedEmissionsEstimator />;
 }

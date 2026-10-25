@@ -1,21 +1,25 @@
 # Modules C2-C5
 
-Status: implemented; validation commands skipped by request.
+Status: implemented; apply `supabase/application_rls.sql` before end-to-end use.
 
 ## Implemented
 
-- C2: route draft planner with origin, destination, one vehicle, ordered stops, optimization preference, local draft save/load, and a schematic route preview.
-- C3: interactive fuel estimate using distance, vehicle efficiency, fuel type, and editable USD/liter price; includes illustrative price history.
-- C4: editable route emissions estimate and period-filtered sample history using illustrative fuel factors.
-- C5: period-filtered operational metrics and history, client-side CSV download, and browser print-to-PDF action.
-- Added isolated sample operation data and documented future provider/data integration boundaries.
+- C2: reads active company locations/vehicles, calls the authenticated OSRM endpoint, validates location ownership, and persists route, ordered stops, PostGIS geometry, and calculation snapshots through an atomic RPC.
+- Added an authenticated `/api/routing/trip` endpoint. It resolves submitted location IDs against the user's company before calling OSRM and validates the provider response.
+- C1: tenant-scoped vehicle CRUD and Auth-backed company membership administration.
+- C3/C4: read saved route calculations and stored price/emission snapshots; editable scenarios do not rewrite history.
+- C5: reports persisted company calculations and saved reference sources; CSV and print/PDF exports are client-side.
+- Added `supabase/application_rls.sql` with company/role policies and required RPCs.
 
 ## Boundaries
 
-- No routing algorithm, map API, live DGEHM price feed, authoritative IPCC/EPA/GLEC factor, persistence, or backend service is connected.
-- All sample values are illustrative and should not be used as official operational estimates.
-- Route drafts and calculator controls remain in browser memory only.
+- OSRM Trip uses its documented heuristic waypoint-ordering behavior. It does not implement Dijkstra/A* or guarantee shortest-distance optimization.
+- A basemap, live DGEHM price feed, and validated official IPCC/EPA/GLEC factor catalog are not connected.
+- OSRM Trip uses heuristic stop ordering and does not implement Dijkstra/A* or guarantee globally shortest distance.
+- Editable calculator scenarios and unsaved route drafts remain in browser memory only.
+- Run `supabase/application_rls.sql` in Supabase SQL Editor; the initial schema SQL does not enable these policies/RPCs.
 
 ## Verification
 
-- Validation commands intentionally not run per request.
+- See `docs/project-quality/test-report.md` for the current verification record.
+- Supabase SQL application and authenticated cross-company behavior require manual verification in the Supabase project.

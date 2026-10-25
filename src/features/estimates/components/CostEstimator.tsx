@@ -17,8 +17,8 @@ const demoRoutes = [
 export function CostEstimator() {
   const [selectedRoute, setSelectedRoute] = useState(0);
   const route = demoRoutes[selectedRoute];
-  const [distance, setDistance] = useState(route.distanceKm);
-  const [efficiency, setEfficiency] = useState(route.efficiency);
+  const [distance, setDistance] = useState<number>(route.distanceKm);
+  const [efficiency, setEfficiency] = useState<number>(route.efficiency);
   const [fuelType, setFuelType] = useState<string>(route.fuel);
   const [unitPrice, setUnitPrice] = useState<number>(
     fuelPrices.find((item) => item.fuel === route.fuel)!.price,

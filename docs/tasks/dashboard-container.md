@@ -13,7 +13,7 @@ Status: implemented; verification partial.
 ## Verification
 
 - `npm run lint`: completed without reported errors.
-- `npm run test`: passed; no tests are currently defined.
+- At the time this task closed, `npm run test` discovered no tests. The current test suites are documented in `docs/project-quality/test-plan.md`.
 - Editor diagnostics: no errors reported for the new dashboard files.
 - Typecheck: not confirmed; the validation call was skipped.
 - Production build: started, but completion was not captured.

@@ -106,3 +106,12 @@ export const sampleOperations: SampleOperation[] = [
     emissionsReducedKg: 28.13,
   },
 ];
+
+export function getSampleOperationsForPeriod(days: number) {
+  const sampleEndTimestamp = Date.parse("2026-10-18T23:59:59Z");
+  const startTimestamp = sampleEndTimestamp - days * 24 * 60 * 60 * 1000;
+
+  return sampleOperations.filter(
+    (operation) => Date.parse(`${operation.date}T12:00:00Z`) >= startTimestamp,
+  );
+}
